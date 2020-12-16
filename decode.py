@@ -1,4 +1,4 @@
-#!/usr/env python3
+#!/usr/env python
 # -*- coding:utf-8 -*-
 import sys
 import random
