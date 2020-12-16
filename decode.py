@@ -7,7 +7,9 @@ import random
 # author = "QiAnXin_RedDrip"
 # twitter = @RedDrip7
 # create_date = "2020-12-15"
+# update_date = "2020-12-16"
 # Thanks QiAnXin CERT for the discovery of decodeable DGA domains
+# https://mp.weixin.qq.com/s/v-ekPFtVNZG1W7vWjcuVug
 '''
 
 def Int2Hex(value,format):
@@ -19,6 +21,55 @@ def Int2Hex(value,format):
 		for i in range(zero):
 			hexStr = hexStr[:2] + '0' + hexStr[2:]
 	return hexStr[2:]
+
+def Base32Encode(tring,rt):
+	text = "ph2eifo3n5utg1j8d94qrvbmk0sal76c"
+	text2 = ""
+	num = 0
+	ib = 0;
+	for i in range(len(tring)):
+		iint = tring[i]
+		b = "0x" + Int2Hex(ord(iint),2)
+		num |= (int(b,16) << ib)
+		ib+=8
+		while (ib >= 5):
+			text2 += text[num & 31]
+			num >>= 5  #将高位的部分右移
+			ib -= 5
+			pass
+		pass
+
+	if (ib > 0):
+		if (rt):
+			pass
+		text2 += text[(num & 31)]
+		pass
+
+	return text2; 
+
+def Base32Decode(string):
+	text = "ph2eifo3n5utg1j8d94qrvbmk0sal76c"
+	restring = ""
+	datalen = len(string) / 8 * 5
+	num = 0
+	ib = 0;
+	if len(string) < 3:
+		restring = chr(text.find(string[0]) | text.find(string[1]) << 5 & 255)
+		return restring
+	
+	k = text.find(string[0]) | (text.find(string[1]) << 5)
+	j = 10
+	index = 2
+	for i in range(datalen):
+		restring += chr(k & 255)
+		k = k >> 8
+		j -= 8
+		while( j < 8 and index < len(string)):
+			k |= (text.find(string[index]) << j)
+			index += 1
+			j += 5
+
+	return restring
 
 '''OrionImprovementBusinessLayer.CryptoHelper.Base64Decode'''
 def Encode(tring):
@@ -69,13 +120,13 @@ def Decode(string):
 
 #print Encode("qingmei-inc.com")
 #print Decode("aovthro08ove0ge2h")
+#print Base32Decode("9tslbqv1ftss4r01eqtobmv1")
 
 '''
   1fik67gkncg86q6daovthro0love0oe2.appsync-api.us-west-2.avsvmcloud.com
   this.guid  --> 1fik67gkncg86q6
   单个字符：  d
   域： qingmei-inc.com   --- > aovthro0love0oe2h  但是由于取的是this.dnStrLower而不是this.dnStr，会吞掉一部分字符,所以最终"h"被吞掉了
-
 '''
 
 #在有域的主机中，走GetPreviousString()模式, 拼接方式： CreateSecureString(this.guid, true) + 一个字符 + this.dnStrLower + ".appsync-api.us-west-2.avsvmcloud.com"
@@ -84,10 +135,15 @@ for line in sys.stdin:
 	if len(data) < 16:
 		continue
 	string = data[16:] #前十六字节： this.guid + 一个字符
-	if "0" not in string:  #如果没有0，说明没有“0.-_”这几个特殊字符，暂时解不开
+	if "0" not in string:  #如果没有0，说明不是OrionImprovementBusinessLayer.CryptoHelper.Base64Encode和OrionImprovementBusinessLayer.CryptoHelper.Base64Decode，暂时解不开
 		continue
 	try:
-		comp = Decode(string)
-		print "%s\t\t\t%s" % (line.rstrip(),comp)
+		if "00" in string:
+			string = string[2:]
+			comp = Base32Decode(string)
+		else:
+			comp = Decode(string)
+
+		print "%s,%s" % (line.rstrip(),comp)
 	except:
 		pass
