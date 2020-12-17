@@ -43,21 +43,37 @@ def ensure_str(input_string):
     return str(input_string)
 
 
-def custom_base32encode(input_string):
-    text = b'ph2eifo3n5utg1j8d94qrvbmk0sal76c'
-    trans = make_trans(b'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567', text)
-    # reverse, custom b32encode, reverse
-    b32_string = b32encode(input_string[::-1].encode())[::-1]
-    ret_string = b32_string.translate(trans).decode()
+def custom_base32encode(input_string, rt):
+    text = 'ph2eifo3n5utg1j8d94qrvbmk0sal76c'
+    ret_string= ''
+    num = 0
+    ib = 0
+    for ch in input_string:
+        num |= ord(ch) << ib
+        ib += 8
+        while ib >= 5:
+            ret_string += text[num & 0b11111]
+            num >>= 5  #将高位的部分右移
+            ib -= 5
+    if ib > 0:
+        if rt:
+            ret_string += text[num & 0b11111]
     return ret_string
 
 
 def custom_base32decode(input_string):
-    text = b'ph2eifo3n5utg1j8d94qrvbmk0sal76c'
-    trans = make_trans(text, b'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
-    # reverse, custom b32decode, reverse
-    b32_string = input_string.translate(trans)
-    ret_string = b32decode(b32_string[::-1].encode())[::-1].decode()
+    text = 'ph2eifo3n5utg1j8d94qrvbmk0sal76c'
+    ret_string = ''
+
+    bits_on_stack = 0
+    bit_stack = 0
+    for ch in input_string:
+        bit_stack |= text.find(ch) << bits_on_stack
+        bits_on_stack += 5
+        if bits_on_stack >= 8:
+            ret_string += chr(bit_stack & 255)
+            bit_stack >>= 8
+            bits_on_stack -= 8
     return ret_string
 
 
