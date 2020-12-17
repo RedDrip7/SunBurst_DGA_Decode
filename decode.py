@@ -107,16 +107,18 @@ def decode_dga(input_string):
     if len(data) >= 16:
         system_guid = data[:15]
         single_char = data[16]
+        in_string = data[16:]
         if '0' in data[16:]:
-            in_string = data[16:]
             try:
-                if "00" in in_string:
+                if in_string.startswith('00'):
                     in_string = in_string[2:]
                     dn_str_lower = custom_base32decode(in_string)
                 else:
                     dn_str_lower = decode_subs_cipher(in_string)
             except:
-                pass
+                dn_str_lower = '(decode failed)'
+        else:
+            dn_str_lower = decode_subs_cipher(in_string) + ' (no dot)'
     return system_guid, single_char, dn_str_lower
 
 
