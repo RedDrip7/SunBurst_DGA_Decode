@@ -118,14 +118,41 @@ def decode_subs_cipher(input_string):
     return trans_string
 
 
+'''OrionImprovementBusinessLayer.CryptoHelper.CreateSecureString-decode'''
+
+
+def decode_guid(input_string):
+    ret_string = ''
+    decoded = custom_base32decode(input_string)
+    xor_key = ord(decoded[0])
+    encoded_guid = decoded[1:]
+    for b in encoded_guid:
+        ret_string += '{:02X}'.format(ord(b)^xor_key)
+    return ret_string
+
+
+def encode_guid(input_string, xor_key=None):
+    ret_string = ''
+    if xor_key is None:
+        xor_key = random.randint(1,127) | 128
+    ret_string += chr(xor_key)
+    while len(input_string)>0:
+        hx = input_string[:2]
+        input_string =  input_string[2:]
+        ret_string += chr(int(hx, 16) ^ xor_key)
+    return custom_base32encode(ret_string)
+
+
 def decode_dga(input_string, prev_strings=None):
     if prev_strings is None:
         prev_strings = []
     data = input_string.split('.', maxsplit=1)[0]
-    system_guid, single_char, dn_str_lower = ('',) * 3
+    system_guid, dn_str_lower = ('',) * 2
     if len(data) >= 16:
-        system_guid = data[:15]
-        single_char = data[16]
+        try:
+            system_guid = decode_guid(data[:16])
+        except:
+            pass
         encoded_string = data[16:]
 
         if '0' in data[16:]:
@@ -151,12 +178,16 @@ def decode_dga(input_string, prev_strings=None):
             # These strings be from a domain that 16+ characters long, or continuation characters from base32 encoding
             dn_str_lower = decode_subs_cipher(encoded_string) + ' (no dot)'
 
-    return system_guid, single_char, dn_str_lower
+    return system_guid, dn_str_lower
 
 assert decode_subs_cipher('aovthro08ove0ge2h') == 'qingmei-inc.com'
 assert decode_subs_cipher(encode_sub_cipher('qingmei-inc.com')) == 'qingmei-inc.com'
 assert custom_base32encode('qingmei-inc.com') == '9tslbqv1ftss4r01eqtobmv1'
 assert custom_base32decode('9tslbqv1ftss4r01eqtobmv1') == 'qingmei-inc.com'
+
+# Thanks to netresec.com for the GUID values
+assert decode_guid('r1qshoj05ji05ac6') == 'F9A9387F7D25284243'
+assert encode_guid('F9A9387F7D25284243', xor_key=180) == 'r1qshoj05ji05ac6'
 
 
 def main():
@@ -168,10 +199,22 @@ def main():
     args = parser.parse_args()
     in_file = args.input
     out_file = args.output
+    summary_dict = {}
     for line in in_file:
         line = line.rstrip()
-        system_guid, single_char, dn_str_lower = decode_dga(line)
-        out_file.write(','.join([line, system_guid, single_char, dn_str_lower]) + '\n')
+        system_guid, dn_str_lower = decode_dga(line)
+        out_file.write(','.join([line, system_guid, dn_str_lower]) + '\n')
+        
+        if system_guid in summary_dict:
+            if dn_str_lower not in summary_dict[system_guid]:
+                summary_dict[system_guid]
+        else:
+            summary_dict[system_guid] = [dn_str_lower]
+        if summary_dict:
+            out_file.write('\nSummary by GUID:\n')
+            for guid, dn_list in summary_dict.items():
+                for li in dn_list:
+                    out_file.write(','.join([guid, li]) + '\n')
 
 
 if __name__ == '__main__':
