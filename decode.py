@@ -17,7 +17,7 @@ import ipaddress
 # Thanks QiAnXin CERT for the discovery of decodeable DGA domains
 # https://mp.weixin.qq.com/s/v-ekPFtVNZG1W7vWjcuVug
 # modified by @malvidin
-# update_date = "2020-12-20"
+# update_date = "2020-12-19"
 '''
 
 
@@ -286,8 +286,6 @@ def main():
     except:
         pass
     out_file.newline=''
-    print(repr(out_file))
-    print(repr(out_file.newline))
     
     csv_out = None
     
@@ -351,8 +349,8 @@ def main():
             line['decode_info'] = decode_info
             if ip_field:
                 line['address_family'] = lookup_address_family(line[ip_field])
-                if query_type:
-                    line['address_family'] = 'C2 Domain - {}'.format(line[ip_field]) if line[query_type].lower() == 'cname' else ''
+                if query_type and line[query_type].lower() == 'cname':
+                    line['address_family'] = 'C2 Domain - {}'.format(line[ip_field])
             csv_out.append(line)
             if system_guid in summary_dict:
                 summary_dict[system_guid]['dn_str_lower'].add(dn_str_lower)
@@ -377,7 +375,7 @@ def main():
                     except:
                         pass
                 else:
-                    summary_dict[guid]['decode_info'] = 'custom_base32'
+                    summary_dict[guid]['decode_info'] = 'subs_cipher'
                     for p in permutations(summ_info['dn_str_lower']):
                         dn_str_list.append(''.join(p))
                 summary_dict[guid]['dn_str_lower'] = ';'.join(dn_str_list)
@@ -393,7 +391,6 @@ def main():
                 header.append(decode_header)
         writer = csv.DictWriter(out_file, header, dialect=dialect)
         writer.writeheader()
-        print(repr(out_file.newline))
         for row in csv_out:
             writer.writerow(row)
 
