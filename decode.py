@@ -6,6 +6,10 @@ import random
 import argparse
 from itertools import permutations
 
+import csv
+from pathlib import Path
+import ipaddress
+
 '''
 # author = "QiAnXin_RedDrip"
 # twitter = @RedDrip7
@@ -13,7 +17,7 @@ from itertools import permutations
 # Thanks QiAnXin CERT for the discovery of decodeable DGA domains
 # https://mp.weixin.qq.com/s/v-ekPFtVNZG1W7vWjcuVug
 # modified by @malvidin
-# update_date = "2020-12-19"
+# update_date = "2020-12-20"
 '''
 
 
@@ -148,7 +152,7 @@ def decode_dga(input_string, prev_strings=None):
     if prev_strings is None:
         prev_strings = []
     data = input_string.split('.', maxsplit=1)[0]
-    system_guid, dn_str_lower, decode_info = ('',) * 3
+    system_guid, dn_str_lower, decode_info, encoded_string = ('',) * 4
     if len(data) >= 16:
         try:
             system_guid = decode_guid(data)[:16]
@@ -185,6 +189,66 @@ def decode_dga(input_string, prev_strings=None):
 
     return system_guid, encoded_string, dn_str_lower, decode_info
 
+
+def lookup_address_family(ip_address):
+    # Needs additional AddressFamilyEx context and IP mapping
+    ipv4nets = {
+        'Atm (prevent execution)': [
+            ipaddress.IPv4Network('127.0.0.0/8'),
+            ipaddress.IPv4Network('10.0.0.0/8'),
+            ipaddress.IPv4Network('172.16.0.0/12'),
+            ipaddress.IPv4Network('192.168.0.0/16'),
+            ipaddress.IPv4Network('224.0.0.0/4'),
+            ],
+        'ImpLink': [
+            ipaddress.IPv4Network('20.140.0.0/15'),
+            ipaddress.IPv4Network('96.31.172.0/24'),
+            ipaddress.IPv4Network('131.228.12.0/22'),
+            ipaddress.IPv4Network('144.86.226.0/24'),
+            ],
+        'Ipx (update Status)': [
+            ipaddress.IPv4Network('41.84.159.0/24'),
+            ipaddress.IPv4Network('74.114.24.0/21'),
+            ipaddress.IPv4Network('154.118.140.0/24'),
+            ipaddress.IPv4Network('217.163.7.0/24'),
+            ],
+        'NetBios (intialize HTTP channel)': [
+            ipaddress.IPv4Network('8.18.144.0/23'),
+            ipaddress.IPv4Network('18.130.0.0/16'),  # ext = true
+            ipaddress.IPv4Network('71.152.53.0/24'),
+            ipaddress.IPv4Network('99.79.0.0/16'),  # ext = true
+            ipaddress.IPv4Network('87.238.80.0/21'),
+            ipaddress.IPv4Network('199.201.117.0/24'),
+            ipaddress.IPv4Network('184.72.0.0/15'),  # ext = true
+            ],
+    }
+    ipv6nets = {
+        'Atm (enum processes and services)': [
+            ipaddress.IPv6Network('fc00::/15'),
+            ipaddress.IPv6Network('fe00::/16'),
+            ipaddress.IPv6Network('ff00::/16'),
+            ],
+    }
+    
+    try:
+        ip = ipaddress.IPv4Address(ip_address)
+        for address_family, net_list in ipv4nets.items():
+            for net in net_list:
+                if ip in net:
+                    return address_family
+    except:
+        pass
+    try:
+        ip = ipaddress.IPv6Address(ip_address)
+        for address_family, net_list in ipv6nets.items():
+            for net in net_list:
+                if ip in net:
+                    return address_family
+    except:
+        pass
+    return ''
+
+
 assert decode_subs_cipher('aovthro08ove0ge2h') == 'qingmei-inc.com'
 assert decode_subs_cipher(encode_sub_cipher('qingmei-inc.com')) == 'qingmei-inc.com'
 assert custom_base32encode('qingmei-inc.com') == '9tslbqv1ftss4r01eqtobmv1'
@@ -198,47 +262,140 @@ assert encode_guid('F9A9387F7D25284243', xor_key=180) == 'r1qshoj05ji05ac6'
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-i', '--input', type=argparse.FileType('r'), default=sys.stdin)
-    parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout)
+    parser.add_argument('-i', '--input', type=argparse.FileType('r'), default=sys.stdin,
+                        help='Input File, defaults to stdin')
+    parser.add_argument('-o', '--output', type=argparse.FileType('w'), default=sys.stdout,
+                        help='Output File, defaults to stdin')
+    
+    parser.add_argument('-c', '--csv', type=argparse.FileType('r'), 
+                        help='Input CSV')
+    
 
     args = parser.parse_args()
-    in_file = args.input
+    use_csv = False
+    if args.csv:
+        use_csv = True
+        in_file = args.csv
+    else:
+        in_file = args.input
     out_file = args.output
     summary_dict = {}
-    for line in in_file:
-        line = line.rstrip()
-        system_guid, encoded_string, dn_str_lower, decode_info = decode_dga(line)
-        out_file.write(','.join([line, system_guid, dn_str_lower, decode_info]) + '\n')
-        
-        if system_guid in summary_dict:
-            summary_dict[system_guid]['dn_str_lower'].add(dn_str_lower)
-            summary_dict[system_guid]['decode_info'].add(decode_info)
-            summary_dict[system_guid]['encoded_string'].add(encoded_string)
-        else:
-            summary_dict[system_guid] = {
-                'dn_str_lower': {dn_str_lower}, 
-                'decode_info': {decode_info},
-                'encoded_string': {encoded_string},
-                }
-    if summary_dict:
-        out_file.write('\nSummary by GUID:\n')
-        for guid, summ_info in summary_dict.items():
-            dn_str_list = None
-            if 'custom_base32' in summ_info['decode_info']:
-                dn_str_list = []
-                try:
-                    for p in permutations(summ_info['encoded_string']):
-                        dn_str_lower_test = custom_base32decode(''.join(p))
-                        if all(ord(char) < 128 for char in dn_str_lower_test):
-                            dn_str_list.append(dn_str_lower_test)
-                except:
-                    pass
-            if dn_str_list:
-                out_file.write(','.join([guid,] + dn_str_list) + '\n')
+    
+    try:
+        out_file.reconfigure(newline='')
+    except:
+        pass
+    out_file.newline=''
+    print(repr(out_file))
+    print(repr(out_file.newline))
+    
+    csv_out = None
+    
+    if not use_csv:
+        for line in in_file:
+            line = line.rstrip()
+            system_guid, encoded_string, dn_str_lower, decode_info = decode_dga(line)
+            out_file.write(','.join([line, system_guid, dn_str_lower, decode_info]) + '\n')
+            
+            if system_guid in summary_dict:
+                summary_dict[system_guid]['dn_str_lower'].add(dn_str_lower)
+                summary_dict[system_guid]['decode_info'].add(decode_info)
+                summary_dict[system_guid]['encoded_string'].add(encoded_string)
             else:
-                for p in permutations(summ_info['dn_str_lower']):                    
-                    out_file.write(','.join([guid, ''.join(p)]) + '\n')
-            out_file.write('\n')
+                summary_dict[system_guid] = {
+                    'dn_str_lower': {dn_str_lower}, 
+                    'decode_info': {decode_info},
+                    'encoded_string': {encoded_string},
+                    }
+        if summary_dict:
+            out_file.write('\nSummary by GUID:\n')
+            for guid, summ_info in summary_dict.items():
+                dn_str_list = None
+                if 'custom_base32' in summ_info['decode_info']:
+                    dn_str_list = []
+                    try:
+                        for p in permutations(summ_info['encoded_string']):
+                            dn_str_lower_test = custom_base32decode(''.join(p))
+                            if all(ord(char) < 128 for char in dn_str_lower_test):
+                                dn_str_list.append(dn_str_lower_test)
+                    except:
+                        pass
+                if dn_str_list:
+                    out_file.write(','.join([guid,] + dn_str_list) + '\n')
+                else:
+                    for p in permutations(summ_info['dn_str_lower']): 
+                        out_file.write(','.join([guid, ''.join(p)]) + '\n')
+                out_file.write('\n')
+    
+    else:
+        dialect = csv.Sniffer().sniff(in_file.read(1024))
+        in_file.seek(0)
+        reader = csv.DictReader(in_file, dialect=dialect)
+        header = reader.fieldnames
+        query_field = reader.fieldnames[0]
+        query_type = None
+        ip_field = None
+        for field in header:
+            if query_field is None and field.lower() in ('query', 'domain', 'name'):
+                query_field = field
+            elif query_type is None and 'type' in field.lower():
+                query_type = field
+            elif ip_field is None and 'ip' in field.lower() or 'response' in field.lower() or 'rdata' in field.lower():
+                ip_field = field
+
+        csv_out = []
+        for line in reader:
+            system_guid, encoded_string, dn_str_lower, decode_info = decode_dga(line[query_field])
+            line['system_guid'] = system_guid
+            line['dn_str_lower'] = dn_str_lower
+            line['decode_info'] = decode_info
+            if ip_field:
+                line['address_family'] = lookup_address_family(line[ip_field])
+                if query_type:
+                    line['address_family'] = 'C2 Domain - {}'.format(line[ip_field]) if line[query_type].lower() == 'cname' else ''
+            csv_out.append(line)
+            if system_guid in summary_dict:
+                summary_dict[system_guid]['dn_str_lower'].add(dn_str_lower)
+                summary_dict[system_guid]['decode_info'].add(decode_info)
+                summary_dict[system_guid]['encoded_string'].add(encoded_string)
+            else:
+                summary_dict[system_guid] = {
+                    'dn_str_lower': {dn_str_lower}, 
+                    'decode_info': {decode_info},
+                    'encoded_string': {encoded_string},
+                    }
+        if summary_dict:
+            for guid, summ_info in summary_dict.items():
+                dn_str_list = []
+                if 'custom_base32' in summ_info['decode_info']:
+                    summary_dict[guid]['decode_info'] = 'custom_base32'
+                    try:
+                        for p in permutations(summ_info['encoded_string']):
+                            dn_str_lower_test = custom_base32decode(''.join(p))
+                            if all(ord(char) < 128 for char in dn_str_lower_test):
+                                dn_str_list.append(dn_str_lower_test)
+                    except:
+                        pass
+                else:
+                    summary_dict[guid]['decode_info'] = 'custom_base32'
+                    for p in permutations(summ_info['dn_str_lower']):
+                        dn_str_list.append(''.join(p))
+                summary_dict[guid]['dn_str_lower'] = ';'.join(dn_str_list)
+            
+        for line in csv_out:
+            if line['system_guid'] in summary_dict and summary_dict[guid]['dn_str_lower'] not in line['dn_str_lower']:
+                line['dn_str_lower'] = summary_dict[guid]['dn_str_lower']
+            if line['system_guid'] in summary_dict and summary_dict[guid]['decode_info'] not in line['decode_info']:
+                line['decode_info'] = summary_dict[guid]['decode_info']
+
+        for decode_header in ('system_guid', 'dn_str_lower', 'decode_info', 'address_family'):
+            if decode_header not in header:
+                header.append(decode_header)
+        writer = csv.DictWriter(out_file, header, dialect=dialect)
+        writer.writeheader()
+        print(repr(out_file.newline))
+        for row in csv_out:
+            writer.writerow(row)
 
 
 if __name__ == '__main__':
